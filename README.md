@@ -52,9 +52,3 @@ Le rapport PDF comprend :
 - Conception technique et architecture du pipeline
 - Résultats d'analyse, modélisation et visualisation
 
-## Encadrement
-Projet réalisé avec l'accompagnement de M. Achraf Akanzal, encadrant technique chez GoBranding.
-
----
-
-Pour toute question ou contribution, n'hésitez pas à ouvrir une issue ou une pull request.
