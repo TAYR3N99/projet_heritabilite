@@ -1,0 +1,12 @@
+pandas
+numpy
+statsmodels
+scikit-learn
+matplotlib
+seaborn
+plotly
+openpyxl
+fpdf
+streamlit
+blinker
+streamlit-option-menu
