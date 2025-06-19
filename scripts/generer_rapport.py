@@ -1,10 +1,11 @@
 from fpdf import FPDF
 import datetime
 import pandas as pd
+import numpy as np
 import statsmodels.api as sm
 from statsmodels.formula.api import mixedlm
 
-def generer_rapport_pdf(nom_fichier, mse, importances, cible, variables_exp, analyse_qualite, heritabilites, analyse_genetique, user):
+def generer_rapport_pdf(nom_fichier, mse, importances, cible, variables_exp, analyse_qualite, heritabilites, analyse_genetique, user, mating_recommendations):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
@@ -60,49 +61,81 @@ def generer_rapport_pdf(nom_fichier, mse, importances, cible, variables_exp, ana
             pdf.cell(200, 10, txt=f"h²({k}) : {v}", ln=1)
     pdf.ln(5)
 
-    # Estimation de l'héritabilité des caractères de production
-    pdf.set_font("Arial", style='B', size=12)
-    pdf.cell(200, 10, txt="4. Estimation de l'héritabilité des caractères de production", ln=1)
-    pdf.set_font("Arial", size=11)
-
-    # Chargement des données
-    data = pd.read_csv('data/donnees_brutes.csv')
-
-    # Modèle mixte pour Kg Lait
-    model_kg_lait = mixedlm("Kg_Lait ~ 1", data, groups=data["N° SNIT"], re_formula="1")
-    result_kg_lait = model_kg_lait.fit(reml=True)
-
-    # Afficher les résultats
-    pdf.cell(200, 10, txt="Résultats pour Kg Lait:", ln=1)
-    pdf.multi_cell(0, 10, txt=str(result_kg_lait.summary()))
-
-    # Modèle mixte pour % MG
-    model_mg = mixedlm("% MG ~ 1", data, groups=data["N° SNIT"], re_formula="1")
-    result_mg = model_mg.fit(reml=True)
-
-    # Afficher les résultats
-    pdf.cell(200, 10, txt="Résultats pour % MG:", ln=1)
-    pdf.multi_cell(0, 10, txt=str(result_mg.summary()))
-
-    # Modèle mixte pour % Prot
-    model_prot = mixedlm("% Prot ~ 1", data, groups=data["N° SNIT"], re_formula="1")
-    result_prot = model_prot.fit(reml=True)
-
-    # Afficher les résultats
-    pdf.cell(200, 10, txt="Résultats pour % Prot:", ln=1)
-    pdf.multi_cell(0, 10, txt=str(result_prot.summary()))
-
     # Importance des variables
     pdf.set_font("Arial", style='B', size=12)
-    pdf.cell(200, 10, txt="5. Importance des variables", ln=1)
+    pdf.cell(200, 10, txt="4. Importance des variables", ln=1) # Renumbered from 5 to 4
     pdf.set_font("Arial", size=11)
     for var, imp in importances.items():
         pdf.cell(200, 10, txt=f"{var} : {imp:.4f}", ln=1)
+    pdf.ln(10) # Add some space before the new section
+
+    # Section 5: Mating Recommendations
+    pdf.set_font("Arial", style='B', size=12)
+    pdf.cell(200, 10, txt="5. Recommandations d'Accouplement", ln=1)
+    pdf.set_font("Arial", size=10)
+
+    if mating_recommendations:
+        # Table Header
+        pdf.set_font("Arial", style='B', size=10)
+        col_width_id = 30
+        col_width_trait = 40
+        col_width_value = 25
+        # col_width_reason = 190 - (2*col_width_id + col_width_trait + 2*col_width_value) # Reason will be on a new line
+
+        pdf.cell(col_width_id, 7, txt="Mâle ID", border=1, ln=0, align='C')
+        pdf.cell(col_width_id, 7, txt="Femelle ID", border=1, ln=0, align='C')
+        pdf.cell(col_width_trait, 7, txt="Focus Caractère", border=1, ln=0, align='C')
+        pdf.cell(col_width_value, 7, txt="Valeur Mâle", border=1, ln=0, align='C')
+        pdf.cell(col_width_value, 7, txt="Valeur Femelle", border=1, ln=1, align='C')
+
+        pdf.set_font("Arial", size=9)
+        for reco in mating_recommendations:
+            male_id = str(reco.get('male_id', 'N/A'))
+            female_id = str(reco.get('female_id', 'N/A'))
+            trait_focus = str(reco.get('trait_focus', 'N/A'))
+
+            male_val = reco.get('male_trait_value')
+            female_val = reco.get('female_trait_value')
+
+            male_trait_value_str = f"{male_val:.2f}" if isinstance(male_val, (int, float)) and not np.isnan(male_val) else "N/A"
+            female_trait_value_str = f"{female_val:.2f}" if isinstance(female_val, (int, float)) and not np.isnan(female_val) else "N/A"
+
+            reason = str(reco.get('reason', 'N/A'))
+
+            if pdf.get_y() + 14 > pdf.page_break_trigger: # Estimate height for table row + reason
+                 pdf.add_page()
+                 pdf.set_font("Arial", style='B', size=10)
+                 pdf.cell(col_width_id, 7, txt="Mâle ID", border=1, ln=0, align='C')
+                 pdf.cell(col_width_id, 7, txt="Femelle ID", border=1, ln=0, align='C')
+                 pdf.cell(col_width_trait, 7, txt="Focus Caractère", border=1, ln=0, align='C')
+                 pdf.cell(col_width_value, 7, txt="Valeur Mâle", border=1, ln=0, align='C')
+                 pdf.cell(col_width_value, 7, txt="Valeur Femelle", border=1, ln=1, align='C')
+                 pdf.set_font("Arial", size=9)
+
+            current_x = pdf.get_x()
+            current_y = pdf.get_y()
+            pdf.multi_cell(col_width_id, 7, txt=male_id, border=1, align='C', new_x="RIGHT", new_y="TOP", max_line_height=7)
+            pdf.set_xy(current_x + col_width_id, current_y)
+            pdf.multi_cell(col_width_id, 7, txt=female_id, border=1, align='C', new_x="RIGHT", new_y="TOP", max_line_height=7)
+            pdf.set_xy(current_x + 2*col_width_id, current_y)
+            pdf.multi_cell(col_width_trait, 7, txt=trait_focus, border=1, align='C', new_x="RIGHT", new_y="TOP", max_line_height=7)
+            pdf.set_xy(current_x + 2*col_width_id + col_width_trait, current_y)
+            pdf.multi_cell(col_width_value, 7, txt=male_trait_value_str, border=1, align='C', new_x="RIGHT", new_y="TOP", max_line_height=7)
+            pdf.set_xy(current_x + 2*col_width_id + col_width_trait + col_width_value, current_y)
+            pdf.multi_cell(col_width_value, 7, txt=female_trait_value_str, border=1, align='C', new_x="RIGHT", new_y="TOP", max_line_height=7)
+            pdf.ln(7)
+
+            pdf.set_fill_color(240, 240, 240)
+            pdf.multi_cell(190, 5, txt=f"Raison: {reason}", border=0, align='L', ln=1, fill=True)
+            pdf.ln(2)
+    else:
+        pdf.cell(200, 10, txt="Aucune recommandation d'accouplement générée.", ln=1)
+    pdf.ln(10)
 
     # Résumé automatique
     pdf.ln(10)
     pdf.set_font("Arial", style='B', size=12)
-    pdf.cell(200, 10, txt="6. Résumé automatique", ln=1)
+    pdf.cell(200, 10, txt="6. Résumé automatique", ln=1) # Renumbered from 6 to 6 (no change here, but good to be explicit)
     pdf.set_font("Arial", size=11)
     
     # Interprétation des résultats

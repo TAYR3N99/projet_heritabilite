@@ -15,7 +15,10 @@ ESSENTIAL_COLS = {
     'Age_velage': float,
     'Rendement_lait': float,
     'Taux_mg': float,
-    'Taux_prot': float
+    'Taux_prot': float,
+    'Sex': str,
+    'Père': str,
+    'Mère': str
 }
 
 def sanitize_column_name(col):
@@ -113,19 +116,55 @@ def nettoyer_donnees(df):
     df_clean = df.copy()
     df_clean.columns = [str(col).strip() for col in df_clean.columns]
     
+    # Comprehensive column mapping
     column_mapping = {
-        'N° SNIT': 'ID',
-        'N° LACT': 'Lactation',
-        'Age Vêlage': 'Age_velage',
-        'Kg Lait': 'Rendement_lait',
-        '% MG': 'Taux_mg',
-        'Kg MG': 'Kg_MG',
-        '% Prot': 'Taux_prot',
-        'Kg Prot': 'Kg_Prot'
+        # French and common variations for ID
+        'N° SNIT': 'ID', 'SNIT': 'ID', 'Numero SNIT': 'ID',
+        # French and common variations for Lactation
+        'N° LACT': 'Lactation', 'LACT': 'Lactation', 'Numero Lactation': 'Lactation',
+        # French and common variations for Age at Calving
+        'Age Vêlage': 'Age_velage', 'Age Velage': 'Age_velage', 'Age au Velage': 'Age_velage',
+        # French and common variations for Milk Yield
+        'Kg Lait': 'Rendement_lait', 'Lait Kg': 'Rendement_lait', 'Production Laitiere': 'Rendement_lait',
+        # French and common variations for Fat Percentage
+        '% MG': 'Taux_mg', 'MG %': 'Taux_mg', 'Taux Matiere Grasse': 'Taux_mg',
+        # French and common variations for Fat Kilograms
+        'Kg MG': 'Kg_MG', 'MG Kg': 'Kg_MG',
+        # French and common variations for Protein Percentage
+'% Prot': 'Taux_prot', 'Prot %': 'Taux_prot', 'Taux Proteine': 'Taux_prot',
+        # French and common variations for Protein Kilograms
+        'Kg Prot': 'Kg_Prot', 'Prot Kg': 'Kg_Prot',
+        # Comprehensive Sex mappings including common typos or variations
+        'Sexe': 'Sex', 'SEXE': 'Sex', 'sex': 'Sex', 'Gender': 'Sex', 'gender': 'Sex', 'Sx': 'Sex', 'SEX': 'Sex',
+        # Comprehensive Sire (Père) mappings
+        'Père': 'Père', 'PÈRE': 'Père', 'père': 'Père', 'Sire': 'Père', 'SIRE': 'Père', 'sire': 'Père',
+        # Comprehensive Dam (Mère) mappings
+        'Mère': 'Mère', 'MÈRE': 'Mère', 'mère': 'Mère', 'Dam': 'Mère', 'DAM': 'Mère', 'dam': 'Mère'
     }
     
     df_clean = df_clean.rename(columns=column_mapping)
 
+    # Standardize Sex column if it exists
+    if 'Sex' in df_clean.columns:
+        # Convert to string, fill NaN with empty string, convert to lowercase, and strip whitespace
+        df_clean['Sex'] = df_clean['Sex'].astype(str).fillna('').str.strip().str.lower()
+
+        sex_value_mapping = {
+            # Male variations
+            'mâle': 'Male', 'male': 'Male', 'm': 'Male', 'masculin': 'Male',
+            # Female variations
+            'femelle': 'Female', 'female': 'Female', 'f': 'Female', 'féminin': 'Female',
+            # Common placeholders for missing or unknown values
+            'nan': '', '': '', 'none': '', 'null': ''
+            # np.nan and None are handled by fillna('') initially
+        }
+        # Apply mapping for known values
+        df_clean['Sex'] = df_clean['Sex'].replace(sex_value_mapping)
+
+        # Ensure that only 'Male' or 'Female' are kept, others become empty string.
+        df_clean['Sex'] = df_clean['Sex'].apply(lambda x: x if x in ['Male', 'Female'] else '')
+
+    # Ensure essential columns exist and have correct types
     for col, dtype in ESSENTIAL_COLS.items():
         if col not in df_clean.columns:
             df_clean[col] = np.nan if dtype == float else ''
@@ -296,6 +335,7 @@ def identifier_variables_heritabilite(df):
         'id': None,
         'pere': None,
         'mere': None,
+        'sex': None,  # Added sex variable
         'traits': []
     }
 
@@ -309,6 +349,9 @@ def identifier_variables_heritabilite(df):
 
     if 'Mère' in df.columns:
         variables['mere'] = 'Mère'
+
+    if 'Sex' in df.columns: # Check for the standardized 'Sex' column
+        variables['sex'] = 'Sex'
 
     standard_trait_names = ['Rendement_lait', 'Taux_mg', 'Taux_prot', 'Kg_MG', 'Kg_Prot']
     for orig_col, std_col in original_to_standard.items():
