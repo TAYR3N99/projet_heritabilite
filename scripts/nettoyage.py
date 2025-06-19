@@ -57,43 +57,75 @@ def charger_fichier_universel(fichier):
     try:
         if fichier.name.endswith(".xlsx"):
             xls = pd.ExcelFile(fichier, engine="openpyxl")
-            df_dict = {}
             
+            if not xls.sheet_names:
+                raise ValueError("The Excel file contains no sheets.")
+
+            df_dict = {}
             for sheet_name in xls.sheet_names:
                 try:
+                    # Try reading with header=0
                     df_tmp = xls.parse(sheet_name, header=0)
-                    if len(df_tmp.columns) == 0 or all('Unnamed' in str(col) for col in df_tmp.columns):
-                        df_tmp = xls.parse(sheet_name, header=1)
+                    # If columns are empty or all are 'Unnamed', try with header=1
+                    if df_tmp.empty or all(str(col).startswith('Unnamed:') for col in df_tmp.columns if str(col).strip()):
+                        df_tmp_h1 = xls.parse(sheet_name, header=1)
+                        if not df_tmp_h1.empty: # Use header=1 if it results in a non-empty dataframe
+                            df_tmp = df_tmp_h1
                     
-                    cols_to_drop = [col for col in df_tmp.columns if str(col).strip() == 'Unnamed: 0' or str(col).strip().startswith('Unnamed:')]
+                    # Drop fully unnamed columns (often an index column)
+                    cols_to_drop = [col for col in df_tmp.columns if str(col).strip() == 'Unnamed: 0' or (str(col).strip().startswith('Unnamed:') and df_tmp[col].isnull().all())]
                     if cols_to_drop:
                         df_tmp = df_tmp.drop(columns=cols_to_drop)
                     
-                    df_dict[sheet_name] = df_tmp
+                    # Only add to dict if the dataframe is not empty after potential header adjustments and column drops
+                    if not df_tmp.empty:
+                        df_dict[sheet_name] = df_tmp
+                    else:
+                        st.warning(f"Sheet '{sheet_name}' was found to be empty or became empty after initial cleanup and was skipped.")
+
                 except Exception as sheet_e:
                     st.error(f"Error processing sheet '{sheet_name}': {sheet_e}")
-                    continue
+                    continue # Continue to try and parse other sheets
             
-            if not df_dict:
-                raise ValueError("No sheets found in the Excel file")
+            if not df_dict: # If no sheets could be successfully parsed and added
+                raise ValueError("No data could be parsed from any sheet in the Excel file.")
+
+            df = None
+            if 'Sujet' in df_dict:
+                # print("INFO: 'Sujet' sheet found. Proceeding with 'Sujet' based logic.") # Optional
+                reference_columns = [str(col).strip() for col in df_dict['Sujet'].columns.tolist()]
+                processed_df_list = []
+
+                for sheet_name, temp_df in df_dict.items():
+                    # Ensure columns are strings for comparison and assignment
+                    temp_df.columns = [str(col).strip() for col in temp_df.columns]
+                    if len(temp_df.columns) == len(reference_columns):
+                        temp_df.columns = reference_columns # Standardize column names
+                        temp_df['Source_Sheet'] = sheet_name
+                        processed_df_list.append(temp_df)
+
+                if not processed_df_list:
+                    # This might happen if 'Sujet' exists but other sheets don't match its column count
+                    # Or if 'Sujet' was the only sheet and it's used directly.
+                    if 'Sujet' in df_dict : # If Sujet was the only one or no other sheet matched
+                        df = df_dict['Sujet']
+                    else: # Should not be reached if Sujet was in df_dict, but as a fallback
+                         raise ValueError("Sheet 'Sujet' was found, but no sheets (including 'Sujet' itself after processing) could be standardized.")
+                else:
+                    df = pd.concat(processed_df_list, ignore_index=True)
             
-            if 'Sujet' not in df_dict:
-                raise ValueError("Sheet 'Sujet' not found in the Excel file.")
-            
-            reference_columns = [str(col).strip() for col in df_dict['Sujet'].columns.tolist()]
-            processed_df_list = []
-            
-            for sheet_name, df_tmp in df_dict.items():
-                if len(df_tmp.columns) == len(reference_columns):
-                    df_tmp.columns = reference_columns
-                    df_tmp['Source_Sheet'] = sheet_name
-                    processed_df_list.append(df_tmp)
-            
-            if not processed_df_list:
-                raise ValueError("No valid sheets processed after standardizing columns")
-            
-            df = pd.concat(processed_df_list, ignore_index=True)
-            df = df.loc[:,~df.columns.duplicated()]
+            else:
+                # 'Sujet' not found, use the first successfully parsed sheet
+                first_sheet_name = next(iter(df_dict)) # Get the first key from the dict of successfully parsed sheets
+                # print(f"INFO: Sheet 'Sujet' not found. Loading data from the first available sheet: {first_sheet_name}") # Optional
+                df = df_dict[first_sheet_name]
+
+            if df is not None and not df.empty:
+                df.columns = [str(col).strip() for col in df.columns] # Ensure all columns are strings
+                df = df.loc[:,~df.columns.duplicated()]
+            elif df is None or df.empty : # If df is None or empty at this point
+                raise ValueError("No data loaded. The file might be empty or structured in an unexpected way.")
+
             return df
             
         elif fichier.name.endswith(".csv"):
